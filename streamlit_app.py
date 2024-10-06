@@ -1,151 +1,103 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
+# Load the data
 @st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def load_data():
+    github_df = pd.read_csv('github_dataset.csv')
+    repo_df = pd.read_csv('repository_data.csv')
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    # Merge the datasets
+    merged_df = pd.merge(github_df, repo_df, left_on='repositories', right_on='name', how='outer')
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    # Convert created_at to datetime
+    merged_df['created_at'] = pd.to_datetime(merged_df['created_at'])
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
+    return merged_df
 
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+df = load_data()
 
-st.header(f'GDP in {to_year}', divider='gray')
+# Title
+st.title('GitHub Repositories Dashboard')
 
-''
+# Display raw data
+if st.checkbox('Show raw data'):
+    st.subheader('Raw data')
+    st.write(df)
 
-cols = st.columns(4)
+# Top repositories by stars
+st.subheader('Top 10 Repositories by Stars')
+top_repos = df.sort_values('stars_count_x', ascending=False).head(10)
+fig = px.bar(top_repos, x='repositories', y='stars_count_x', title='Top 10 Repositories by Stars')
+st.plotly_chart(fig)
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
+# Language distribution
+st.subheader('Primary Language Distribution')
+lang_counts = df['primary_language'].value_counts()
+fig = px.pie(values=lang_counts.values, names=lang_counts.index, title='Primary Language Distribution')
+st.plotly_chart(fig)
 
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+# Scatter plot: Stars vs Forks
+st.subheader('Stars vs Forks')
+fig = px.scatter(df, x='stars_count_x', y='forks_count_x', hover_name='repositories',
+                 title='Stars vs Forks', log_x=True, log_y=True)
+st.plotly_chart(fig)
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+# Histogram of pull requests
+st.subheader('Distribution of Pull Requests')
+fig = px.histogram(df, x='pull_requests_y', title='Distribution of Pull Requests')
+st.plotly_chart(fig)
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+# Top repositories by commit count
+st.subheader('Top 10 Repositories by Commit Count')
+top_commits = df.sort_values('commit_count', ascending=False).head(10)
+fig = px.bar(top_commits, x='repositories', y='commit_count', title='Top 10 Repositories by Commit Count')
+st.plotly_chart(fig)
+
+# Repository creation over time
+st.subheader('Repository Creation Over Time')
+df['created_year'] = df['created_at'].dt.year
+year_counts = df['created_year'].value_counts().sort_index()
+fig = px.line(x=year_counts.index, y=year_counts.values, title='Repository Creation by Year')
+fig.update_xaxes(title='Year')
+fig.update_yaxes(title='Number of Repositories')
+st.plotly_chart(fig)
+
+# Top languages used
+st.subheader('Top 10 Most Used Languages')
+all_languages = df['languages_used'].str.split(',', expand=True).stack()
+language_counts = all_languages.value_counts().head(10)
+fig = px.bar(x=language_counts.index, y=language_counts.values, title='Top 10 Most Used Languages')
+fig.update_xaxes(title='Language')
+fig.update_yaxes(title='Count')
+st.plotly_chart(fig)
+
+# Correlation heatmap
+st.subheader('Correlation Heatmap')
+numeric_cols = ['stars_count_x', 'forks_count_x', 'issues_count', 'pull_requests_x', 'contributors', 'watchers',
+                'commit_count']
+corr = df[numeric_cols].corr()
+fig = px.imshow(corr, title='Correlation Heatmap')
+st.plotly_chart(fig)
+
+# Watchers vs Stars
+st.subheader('Watchers vs Stars')
+fig = px.scatter(df, x='watchers', y='stars_count_x', hover_name='repositories',
+                 title='Watchers vs Stars', log_x=True, log_y=True)
+st.plotly_chart(fig)
+
+# Top 10 repositories by issues count
+st.subheader('Top 10 Repositories by Issues Count')
+top_issues = df.sort_values('issues_count', ascending=False).head(10)
+fig = px.bar(top_issues, x='repositories', y='issues_count', title='Top 10 Repositories by Issues Count')
+st.plotly_chart(fig)
+
+# Distribution of contributors
+st.subheader('Distribution of Contributors')
+fig = px.histogram(df, x='contributors', title='Distribution of Contributors', log_x=True)
+st.plotly_chart(fig)
