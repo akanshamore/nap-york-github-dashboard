@@ -20,7 +20,7 @@ A simple Streamlit app showing the GDP of different countries in the world.
    python3 -m venv streamlit_env
    source streamlit_env/bin/activate
    pip install streamlit pandas plotly
-   streamlit run app.py
+
 
    ```
 
