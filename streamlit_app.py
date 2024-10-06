@@ -47,10 +47,36 @@ top_issues = df.sort_values('issues_count', ascending=False).head(10)
 fig = px.bar(top_issues, x='repositories', y='issues_count', title='Top 10 Repositories by Issues Count')
 st.plotly_chart(fig)
 
-# Distribution of contributors
+# Distribution of Contributors
 st.subheader('Distribution of Contributors')
-fig = px.histogram(df, x='contributors', title='Distribution of Contributors', log_x=True)
+
+# Check the data type of the 'contributors' column
+st.write(f"Data type of 'contributors' column: {df['contributors'].dtype}")
+
+# Display some basic statistics
+st.write("Basic statistics of 'contributors':")
+st.write(df['contributors'].describe())
+
+# Check for any non-numeric values
+non_numeric = df[pd.to_numeric(df['contributors'], errors='coerce').isna()]
+if not non_numeric.empty:
+    st.write("Rows with non-numeric values in 'contributors':")
+    st.write(non_numeric)
+
+# Try to convert 'contributors' to numeric, replacing any non-numeric values with NaN
+df['contributors_numeric'] = pd.to_numeric(df['contributors'], errors='coerce')
+
+# Create the histogram using the numeric version
+fig = px.histogram(df, x='contributors_numeric', title='Distribution of Contributors', log_x=True)
+fig.update_xaxes(title='Number of Contributors')
+fig.update_yaxes(title='Count')
 st.plotly_chart(fig)
+
+# Display repositories with the most contributors
+st.subheader('Top 10 Repositories by Number of Contributors')
+top_contributors = df.sort_values('contributors_numeric', ascending=False).head(10)
+st.write(top_contributors[['repositories', 'contributors', 'contributors_numeric']])
+
 
 # Correlation heatmap
 st.subheader('Correlation Heatmap')
